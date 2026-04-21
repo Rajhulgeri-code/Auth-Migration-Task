@@ -4,4 +4,4 @@ node_modules/
 dist/
 build/
 prisma/generated/src/generated/
-src/generated/
+src/generated/private.pem
