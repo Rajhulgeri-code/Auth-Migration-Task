@@ -41,12 +41,13 @@ auth-backend/
 │   └── index.js            # All routes, middleware, and logic
 ├── tests/
 │   └── auth.test.js
-├── .env
+├── docker-compose.yml
 ├── .env.example
 ├── package.json
 ├── prisma.config.ts
 ├── CHECKLIST.md
-└── SUBMISSION.md
+├── SUBMISSION.md
+└── README.md
 ```
 
 ---
@@ -66,27 +67,57 @@ cd Auth-Migration-Task
 npm install
 ```
 
-### 3. Configure Environment Variables
+### 3. Set Up PostgreSQL
 
-Copy the example file and fill in your values:
+Choose the option that suits your setup:
+
+---
+
+#### Option A — Using Docker (recommended, no PostgreSQL installation needed)
+
+Make sure Docker Desktop is installed and running, then:
 
 ```bash
-cp .env.example .env
+docker-compose up db -d
 ```
 
+This starts a fresh PostgreSQL instance in a container on port `5433`. Then set your `.env`:
+
 ```env
-DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/authdb"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/authdb"
 ACCESS_TOKEN_SECRET="your_access_secret"
 REFRESH_TOKEN_SECRET="your_refresh_secret"
 ```
 
-### 4. Apply Database Migrations
+---
 
-```bash
-npx prisma migrate dev
+#### Option B — Using your own local PostgreSQL
+
+If PostgreSQL is already installed on your machine, create the database and point your `.env` to it:
+
+```sql
+CREATE DATABASE authdb;
 ```
 
-### 5. Start the Server
+```env
+DATABASE_URL="postgresql://YOUR_USER:YOUR_PASSWORD@localhost:5432/authdb"
+ACCESS_TOKEN_SECRET="your_access_secret"
+REFRESH_TOKEN_SECRET="your_refresh_secret"
+```
+
+---
+
+### 4. Run Tests
+
+`npm test` automatically handles Prisma client generation and migrations before running the test suite:
+
+```bash
+npm test
+```
+
+That's it — no manual migration step needed.
+
+### 5. Start the Server (optional, for manual testing)
 
 ```bash
 node src/index.js
@@ -110,6 +141,39 @@ Server runs at `http://localhost:5000`
 | POST | `/2fa/login/verify` | No | Complete login with OTP |
 | POST | `/forgot-password` | No | Request password reset token |
 | POST | `/reset-password` | No | Reset password using token |
+
+---
+
+## Running Tests
+
+```bash
+npm test
+```
+
+The `pretest` script automatically runs `prisma generate` and `prisma migrate deploy` before the test suite executes. The test suite uses **Jest + Supertest** and runs a complete end-to-end flow against a real database, cleaning up before and after all tests automatically.
+
+### What's Tested
+
+| Area | Cases Covered |
+|---|---|
+| Registration | Valid input, invalid email, short password, duplicate email |
+| Login | Success, wrong password, unknown email |
+| Profile | Access with valid token, rejection without token |
+| Refresh Token | Rotation, reuse attack detection, invalid token |
+| Forgot Password | Token generation, password reset, token reuse prevention |
+| 2FA | Enable OTP, verify OTP, login with OTP |
+| Logout | Token revocation, refresh fails after logout |
+
+---
+
+## OTP & Reset Token Delivery
+
+This project uses a **mock delivery system** — all OTPs and reset tokens are printed to the server console:
+
+```
+[OTP] enable_2fa OTP for user abc123: 847291
+[AUTH] Password reset token for user@gmail.com: f3a9c1...
+```
 
 ---
 
@@ -139,36 +203,12 @@ Server runs at `http://localhost:5000`
 
 ---
 
-## Running Tests
+## Bonus Features Implemented
 
-```bash
-npm test
-```
+The following optional features from the brief were implemented:
 
-The test suite uses **Jest + Supertest** and runs a complete end-to-end flow against a real database. It cleans up before and after all tests automatically.
-
-### What's Tested
-
-| Area | Cases Covered |
-|---|---|
-| Registration | Valid input, invalid email, short password, duplicate email |
-| Login | Success, wrong password, unknown email |
-| Profile | Access with valid token, rejection without token |
-| Refresh Token | Rotation, reuse attack detection, invalid token |
-| Forgot Password | Token generation, password reset, token reuse prevention |
-| 2FA | Enable OTP, verify OTP, login with OTP |
-| Logout | Token revocation, refresh fails after logout |
-
----
-
-## OTP & Reset Token Delivery
-
-This project uses a **mock delivery system** — all OTPs and reset tokens are printed to the server console:
-
-```
-[OTP] enable_2fa OTP for user abc123: 847291
-[AUTH] Password reset token for user@gmail.com: f3a9c1...
-```
+- **Refresh token reuse detection** — presenting a used refresh token immediately revokes all sessions for that user
+- **OTP attempt limiting** — OTP is locked after 5 failed attempts, preventing brute force
 
 ---
 

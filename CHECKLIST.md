@@ -3,20 +3,24 @@
 ## 1. Project Setup & Running
 
 - [x] **Code runs with provided instructions**
-  - No Docker required
   - Server starts with `node src/index.js`
   - Runs at `http://localhost:5000`
   - Full instructions in `README.md` and `SUBMISSION.md`
 
-- [x] **Database migrations applied**
-  - 3 migrations included in `prisma/migrations/`
-  - Run with `npx prisma migrate dev`
-  - Uses PostgreSQL via Prisma + PrismaPg adapter
+- [x] **Docker support provided**
+  - `docker-compose.yml` included — starts PostgreSQL on port `5433`
+  - No PostgreSQL installation needed if Docker is available
+  - Alternatively, works with any local PostgreSQL via `.env` configuration
 
-- [x] **Evaluator credentials available**
+- [x] **Database migrations applied automatically**
+  - 3 migrations in `prisma/migrations/`
+  - `pretest` script in `package.json` runs `prisma migrate deploy` automatically before `npm test`
+  - No manual migration step needed
+
+- [x] **Evaluator credentials**
   - Email: `testuser@gmail.com`
   - Password: `123456`
-  - Or register a fresh user via `POST /register`
+  - Tests auto-register and auto-cleanup — no manual setup needed
 
 ---
 
@@ -30,17 +34,17 @@
 - [x] **Login** — `POST /login`
   - Validates credentials against hashed password
   - Issues access token (15min) + refresh token (7 days) on success
-  - If 2FA is enabled, returns `requires2FA: true` instead of tokens
+  - Returns `requires2FA: true` if 2FA is enabled
 
 - [x] **2FA Enable** — `POST /2fa/enable` *(requires Bearer token)*
   - Generates 6-digit OTP, logs to console (mock delivery)
   - OTP expires in 5 minutes, max 5 attempts
 
 - [x] **2FA Verify** — `POST /2fa/verify`
-  - Validates OTP and sets `is_2fa_enabled: true` on user
+  - Validates OTP and activates 2FA on the account
 
 - [x] **2FA Login** — `POST /2fa/login/verify`
-  - Completes login flow when 2FA is required
+  - Completes login when 2FA is required
   - Issues full token pair on success
 
 ---
@@ -53,7 +57,7 @@
   - Token printed to server console (mock delivery)
 
 - [x] **Reset Password** — `POST /reset-password`
-  - Validates token, checks expiry
+  - Validates token and checks expiry
   - Updates password hash, marks token as used
   - Token cannot be reused (returns 400)
 
@@ -63,16 +67,15 @@
 
 - [x] **Protected Route** — `GET /profile` *(requires Bearer token)*
   - Returns user profile data
-  - Returns 401 with missing token
-  - Returns 401 with invalid/expired token
+  - Returns 401 with missing or invalid token
 
 - [x] **Refresh Token Rotation** — `POST /token/refresh`
-  - Issues new access + refresh token pair
+  - Issues new access + refresh token pair on every call
   - Old refresh token immediately revoked
   - Refresh tokens stored as **bcrypt hashes** — raw token never in DB
 
 - [x] **Refresh Token Reuse Detection** — `POST /token/refresh`
-  - If a previously used token is presented, **all sessions for that user are revoked**
+  - Presenting a used token revokes **all sessions** for that user
   - Returns 403 on reuse attempt
 
 - [x] **Logout** — `POST /logout`
@@ -88,9 +91,14 @@
   npm test
   ```
 
+- [x] **`pretest` script handles everything automatically:**
+  - Runs `prisma generate` — generates Prisma client
+  - Runs `prisma migrate deploy` — applies all migrations
+  - No manual setup needed before `npm test`
+
 - [x] **Framework:** Jest + Supertest
 
-- [x] **Database:** Tests run against real PostgreSQL DB, auto-cleanup before and after
+- [x] **Tests run against real PostgreSQL DB** with auto-cleanup before and after
 
 - [x] **Full coverage:**
 
@@ -118,9 +126,7 @@
   | `proof_pub.pem` | Public key for evaluator verification |
 
 - [x] **Private key (`private.pem`) excluded from repo** via `.gitignore`
-
 - [x] **Signature uses ECDSA secp256r1 (prime256v1)**
-
 - [x] **SHA256 computed over exact concatenation:** `challenge + commit_hash` (no whitespace)
 
 ---
@@ -128,11 +134,18 @@
 ## 7. SUBMISSION.md
 
 - [x] Included in repo root
-- [x] Contains evaluator credentials
-- [x] Step-by-step run instructions
+- [x] Evaluator credentials documented
+- [x] Quick start instructions with Docker and without Docker
 - [x] Exact `git rev-parse HEAD` output
 - [x] Exact `sha256sum` output
 - [x] Full `compute_proof.sh` script contents
 - [x] Complete API flow table
 - [x] Security features documented
-- [x] Files included in `PROOF_OF_SUBMISSION/` documented
+- [x] All `PROOF_OF_SUBMISSION/` files documented
+
+---
+
+## 8. Bonus Features Implemented
+
+- [x] **Refresh token reuse detection** — reuse of any token revokes all sessions for that user
+- [x] **OTP attempt limiting** — locked after 5 failed attempts, preventing brute force
