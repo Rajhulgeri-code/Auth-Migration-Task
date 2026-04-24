@@ -14,6 +14,7 @@ model User {
   phone           String?
   is_active       Boolean  @default(true)
   is_2fa_enabled  Boolean  @default(false)
+  totp_secret     String?           // ← ADD THIS
   created_at      DateTime @default(now())
 
   otps          Otp[]

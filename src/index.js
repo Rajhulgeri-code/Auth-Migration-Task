@@ -420,6 +420,87 @@ app.get("/profile", authMiddleware, async (req, res) => {
   res.json({ ...user, active_sessions: activeSessions });
 });
 
+/* ---------------- TOTP SETUP ---------------- */
+const speakeasy = require("speakeasy");
+const QRCode = require("qrcode");
+
+app.post("/2fa/totp/setup", authMiddleware, async (req, res) => {
+  const secret = speakeasy.generateSecret({
+    name: `AuthApp (${req.user.userId})`
+  });
+
+  await prisma.user.update({
+    where: { id: req.user.userId },
+    data: { totp_secret: secret.base32 }
+  });
+
+  const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
+
+  console.log(`[TOTP] Secret for user ${req.user.userId}: ${secret.base32}`);
+
+  res.json({
+    message: "Scan the QR code with Google Authenticator",
+    secret: secret.base32,
+    qrCode: qrCodeUrl
+  });
+});
+
+/* ---------------- TOTP VERIFY ---------------- */
+app.post("/2fa/totp/verify", authMiddleware, async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) return res.status(422).json({ error: "token is required" });
+
+  const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
+
+  if (!user.totp_secret) {
+    return res.status(400).json({ error: "TOTP not set up for this user" });
+  }
+
+  const verified = speakeasy.totp.verify({
+    secret: user.totp_secret,
+    encoding: "base32",
+    token,
+    window: 1
+  });
+
+  if (!verified) return res.status(400).json({ error: "Invalid TOTP token" });
+
+  await prisma.user.update({
+    where: { id: req.user.userId },
+    data: { is_2fa_enabled: true }
+  });
+
+  console.log(`[TOTP] 2FA enabled via TOTP for user: ${req.user.userId}`);
+  res.json({ message: "TOTP verified and 2FA enabled" });
+});
+
+/* ---------------- TOTP LOGIN VERIFY ---------------- */
+app.post("/2fa/totp/login/verify", async (req, res) => {
+  const { userId, token } = req.body;
+
+  if (!userId || !token) {
+    return res.status(422).json({ error: "userId and token are required" });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  if (!user || !user.totp_secret) {
+    return res.status(400).json({ error: "TOTP not configured for this user" });
+  }
+
+  const verified = speakeasy.totp.verify({
+    secret: user.totp_secret,
+    encoding: "base32",
+    token,
+    window: 1
+  });
+
+  if (!verified) return res.status(400).json({ error: "Invalid TOTP token" });
+
+  return issueTokens(userId, res, req);
+});
+
 /* ---------------- SERVER ---------------- */
 if (require.main === module) {
   app.listen(5000, () => console.log("Server started on port 5000"));
