@@ -10,6 +10,7 @@ const prisma = new PrismaClient({ adapter });
 
 let accessToken = "";
 let refreshToken = "";
+let oldRefreshToken = ""; // ← fix: properly declared
 let userId = "";
 let resetToken = "";
 let otpCode = "";
@@ -86,6 +87,9 @@ describe("Auth Flow", () => {
       .get("/profile")
       .set("Authorization", `Bearer ${accessToken}`);
     expect(res.statusCode).toBe(200);
+    expect(res.body).toHaveProperty("email", testUser.email);
+    expect(res.body).toHaveProperty("active_sessions");
+    expect(Array.isArray(res.body.active_sessions)).toBe(true);
   });
 
   it("should reject profile without token", async () => {
@@ -93,17 +97,17 @@ describe("Auth Flow", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  /* ---------------- REFRESH ---------------- */
+  /* ---------------- REFRESH + ROTATION ---------------- */
   it("should refresh token", async () => {
     const res = await request(app)
       .post("/token/refresh")
       .send({ refreshToken });
 
     expect(res.statusCode).toBe(200);
+    expect(res.body).toHaveProperty("accessToken");
+    expect(res.body).toHaveProperty("refreshToken");
 
-    // 🔥 IMPORTANT: keep old token for reuse test
-    oldRefreshToken = refreshToken;
-
+    oldRefreshToken = refreshToken; // save before overwriting
     accessToken = res.body.accessToken;
     refreshToken = res.body.refreshToken;
   });
@@ -116,12 +120,20 @@ describe("Auth Flow", () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it("should fail invalid refresh token", async () => {
+  it("should fail with invalid refresh token", async () => {
     const res = await request(app)
       .post("/token/refresh")
-      .send({ refreshToken: "invalid" });
+      .send({ refreshToken: "invalid.token.value" });
 
     expect(res.statusCode).toBe(403);
+  });
+
+  /* Re-login after reuse detection revoked all sessions */
+  it("should re-login after reuse detection revoked all sessions", async () => {
+    const res = await request(app).post("/login").send(testUser);
+    expect(res.statusCode).toBe(200);
+    accessToken = res.body.accessToken;
+    refreshToken = res.body.refreshToken;
   });
 
   /* ---------------- FORGOT PASSWORD ---------------- */
@@ -136,6 +148,7 @@ describe("Auth Flow", () => {
       where: { user_id: userId, purpose: "forgot_password", used: false }
     });
 
+    expect(record).not.toBeNull();
     resetToken = record.code;
   });
 
@@ -165,7 +178,7 @@ describe("Auth Flow", () => {
     refreshToken = res.body.refreshToken;
   });
 
-  /* ---------------- 2FA ---------------- */
+  /* ---------------- 2FA (SMS OTP) ---------------- */
   it("should send 2FA enable OTP", async () => {
     const res = await request(app)
       .post("/2fa/enable")
@@ -177,10 +190,19 @@ describe("Auth Flow", () => {
       where: { user_id: userId, purpose: "enable_2fa", used: false }
     });
 
+    expect(record).not.toBeNull();
     otpCode = record.code;
   });
 
-  it("should enable 2FA", async () => {
+  it("should reject invalid OTP on verify", async () => {
+    const res = await request(app)
+      .post("/2fa/verify")
+      .send({ userId, otp: "000000" });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("should enable 2FA with correct OTP", async () => {
     const res = await request(app)
       .post("/2fa/verify")
       .send({ userId, otp: otpCode });
@@ -188,17 +210,19 @@ describe("Auth Flow", () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it("should require 2FA on login", async () => {
+  it("should require 2FA on next login", async () => {
     const res = await request(app)
       .post("/login")
       .send({ email: testUser.email, password: "newpass123" });
 
     expect(res.body.requires2FA).toBe(true);
+    expect(res.body).toHaveProperty("userId");
 
     const record = await prisma.otp.findFirst({
       where: { user_id: userId, purpose: "login", used: false }
     });
 
+    expect(record).not.toBeNull();
     otpCode = record.code;
   });
 
@@ -208,9 +232,26 @@ describe("Auth Flow", () => {
       .send({ userId, otp: otpCode });
 
     expect(res.statusCode).toBe(200);
+    expect(res.body).toHaveProperty("accessToken");
+    expect(res.body).toHaveProperty("refreshToken");
 
     accessToken = res.body.accessToken;
     refreshToken = res.body.refreshToken;
+  });
+
+  /* ---------------- DEVICE SCOPING ---------------- */
+  it("should show active sessions with device info on profile", async () => {
+    const res = await request(app)
+      .get("/profile")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .set("User-Agent", "TestAgent/1.0");
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.active_sessions.length).toBeGreaterThan(0);
+    // device_info and ip_address fields exist on each session
+    const session = res.body.active_sessions[0];
+    expect(session).toHaveProperty("device_info");
+    expect(session).toHaveProperty("ip_address");
   });
 
   /* ---------------- LOGOUT ---------------- */

@@ -48,7 +48,7 @@ npm install
 npm test
 ```
 
-The `pretest` script automatically runs `prisma generate` and `prisma migrate deploy` before tests execute. No manual migration step needed. All 22 tests should pass.
+The `pretest` script automatically runs `prisma generate` and `prisma migrate deploy` before tests execute. No manual migration step needed. All 25 tests should pass.
 
 ---
 
@@ -87,6 +87,7 @@ All OTPs and reset tokens are printed to the server console (mock delivery):
 [OTP] enable_2fa OTP for user abc123: 847291
 [AUTH] Password reset token for user@gmail.com: f3a9c1...
 [AUTH] Tokens issued for user: abc123 | Device: PostmanRuntime/7.x | IP: ::ffff:127.0.0.1
+[TOTP] Secret for user abc123: JBSWY3DPEHPK3PXP
 ```
 
 ---
@@ -100,11 +101,14 @@ All OTPs and reset tokens are printed to the server console (mock delivery):
 | 3 | POST | `/2fa/enable` | Send OTP to enable 2FA (Bearer token required) |
 | 4 | POST | `/2fa/verify` | Verify OTP to activate 2FA |
 | 5 | POST | `/2fa/login/verify` | Complete login with OTP |
-| 6 | GET | `/profile` | Get user profile + active sessions with device info |
-| 7 | POST | `/token/refresh` | Rotate refresh token |
-| 8 | POST | `/logout` | Revoke refresh token |
-| 9 | POST | `/forgot-password` | Request password reset token |
-| 10 | POST | `/reset-password` | Reset password using token |
+| 6 | POST | `/2fa/totp/setup` | Generate TOTP secret + QR code (Bearer token required) |
+| 7 | POST | `/2fa/totp/verify` | Verify TOTP code and activate 2FA (Bearer token required) |
+| 8 | POST | `/2fa/totp/login/verify` | Complete login with Google Authenticator code |
+| 9 | GET | `/profile` | Get user profile + active sessions with device info |
+| 10 | POST | `/token/refresh` | Rotate refresh token |
+| 11 | POST | `/logout` | Revoke refresh token |
+| 12 | POST | `/forgot-password` | Request password reset token |
+| 13 | POST | `/reset-password` | Reset password using token |
 
 ---
 
@@ -114,8 +118,9 @@ All OTPs and reset tokens are printed to the server console (mock delivery):
 - JWT access tokens (15 min) + refresh tokens (7 days)
 - Refresh tokens **hashed with bcrypt** before storing — raw token never in DB
 - Refresh token rotation + reuse detection — reuse revokes all sessions
-- **Device scoping** — `User-Agent` and IP address stored per refresh token
+- **Device scoping** — `User-Agent` and IP address stored per refresh token, visible at `/profile`
 - OTP expiration (5 min) and attempt limiting (max 5 attempts)
+- TOTP via **Google Authenticator** — offline, no SMS required, 30-second rotating codes
 - Rate limiting — auth endpoints (20 req/15min), OTP endpoints (10 req/15min)
 - Input validation with **express-validator**
 - Cryptographically random reset tokens (`crypto.randomBytes`)
