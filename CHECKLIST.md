@@ -13,8 +13,8 @@
   - Alternatively, works with any local PostgreSQL via `.env` configuration
 
 - [x] **Database migrations applied automatically**
-  - 3 migrations in `prisma/migrations/`
-  - `pretest` script in `package.json` runs `prisma migrate deploy` automatically before `npm test`
+  - 4 migrations in `prisma/migrations/`
+  - `pretest` script runs `prisma migrate deploy` automatically before `npm test`
   - No manual migration step needed
 
 - [x] **Evaluator credentials**
@@ -67,15 +67,16 @@
 
 - [x] **Protected Route** — `GET /profile` *(requires Bearer token)*
   - Returns user profile data
+  - Returns active sessions with device info and IP address
   - Returns 401 with missing or invalid token
 
 - [x] **Refresh Token Rotation** — `POST /token/refresh`
   - Issues new access + refresh token pair on every call
   - Old refresh token immediately revoked
-  - Refresh tokens stored as **bcrypt hashes** — raw token never in DB
+  - Refresh tokens stored as bcrypt hashes — raw token never in DB
 
 - [x] **Refresh Token Reuse Detection** — `POST /token/refresh`
-  - Presenting a used token revokes **all sessions** for that user
+  - Presenting a used token revokes all sessions for that user
   - Returns 403 on reuse attempt
 
 - [x] **Logout** — `POST /logout`
@@ -98,7 +99,7 @@
 
 - [x] **Framework:** Jest + Supertest
 
-- [x] **Tests run against real PostgreSQL DB** with auto-cleanup before and after
+- [x] **22 tests passing** against real PostgreSQL DB with auto-cleanup
 
 - [x] **Full coverage:**
 
@@ -135,7 +136,7 @@
 
 - [x] Included in repo root
 - [x] Evaluator credentials documented
-- [x] Quick start instructions with Docker and without Docker
+- [x] Quick start with Docker and local PostgreSQL options
 - [x] Exact `git rev-parse HEAD` output
 - [x] Exact `sha256sum` output
 - [x] Full `compute_proof.sh` script contents
@@ -147,5 +148,8 @@
 
 ## 8. Bonus Features Implemented
 
-- [x] **Refresh token reuse detection** — reuse of any token revokes all sessions for that user
-- [x] **OTP attempt limiting** — locked after 5 failed attempts, preventing brute force
+| Bonus Feature | Status |
+|---|---|
+| Refresh token rotation + reuse detection | ✅ Reuse revokes all sessions |
+| Device scoping for refresh tokens | ✅ User-Agent + IP stored per token |
+| Rate-limited endpoints + OTP attempt limiting | ✅ 20 req/15min, max 5 OTP attempts |

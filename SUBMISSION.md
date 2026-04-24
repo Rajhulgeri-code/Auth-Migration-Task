@@ -48,7 +48,7 @@ npm install
 npm test
 ```
 
-The `pretest` script automatically runs `prisma generate` and `prisma migrate deploy` before tests execute. No manual migration step needed.
+The `pretest` script automatically runs `prisma generate` and `prisma migrate deploy` before tests execute. No manual migration step needed. All 22 tests should pass.
 
 ---
 
@@ -62,7 +62,7 @@ ACCESS_TOKEN_SECRET="your_access_secret"
 REFRESH_TOKEN_SECRET="your_refresh_secret"
 ```
 
-Then run:
+Then:
 
 ```bash
 npm install
@@ -86,24 +86,25 @@ All OTPs and reset tokens are printed to the server console (mock delivery):
 ```
 [OTP] enable_2fa OTP for user abc123: 847291
 [AUTH] Password reset token for user@gmail.com: f3a9c1...
+[AUTH] Tokens issued for user: abc123 | Device: PostmanRuntime/7.x | IP: ::ffff:127.0.0.1
 ```
 
 ---
 
 ## API Flow
 
-| Step | Method | Endpoint |
-|---|---|---|
-| 1 | POST | `/register` |
-| 2 | POST | `/login` |
-| 3 | POST | `/2fa/enable` |
-| 4 | POST | `/2fa/verify` |
-| 5 | POST | `/2fa/login/verify` |
-| 6 | GET | `/profile` |
-| 7 | POST | `/token/refresh` |
-| 8 | POST | `/logout` |
-| 9 | POST | `/forgot-password` |
-| 10 | POST | `/reset-password` |
+| Step | Method | Endpoint | Description |
+|---|---|---|---|
+| 1 | POST | `/register` | Register new user |
+| 2 | POST | `/login` | Login — returns tokens or requires2FA |
+| 3 | POST | `/2fa/enable` | Send OTP to enable 2FA (Bearer token required) |
+| 4 | POST | `/2fa/verify` | Verify OTP to activate 2FA |
+| 5 | POST | `/2fa/login/verify` | Complete login with OTP |
+| 6 | GET | `/profile` | Get user profile + active sessions with device info |
+| 7 | POST | `/token/refresh` | Rotate refresh token |
+| 8 | POST | `/logout` | Revoke refresh token |
+| 9 | POST | `/forgot-password` | Request password reset token |
+| 10 | POST | `/reset-password` | Reset password using token |
 
 ---
 
@@ -113,8 +114,9 @@ All OTPs and reset tokens are printed to the server console (mock delivery):
 - JWT access tokens (15 min) + refresh tokens (7 days)
 - Refresh tokens **hashed with bcrypt** before storing — raw token never in DB
 - Refresh token rotation + reuse detection — reuse revokes all sessions
-- OTP expiration (5 min) and attempt limiting (max 5)
-- Rate limiting on auth endpoints (20 req/15min) and OTP endpoints (10 req/15min)
+- **Device scoping** — `User-Agent` and IP address stored per refresh token
+- OTP expiration (5 min) and attempt limiting (max 5 attempts)
+- Rate limiting — auth endpoints (20 req/15min), OTP endpoints (10 req/15min)
 - Input validation with **express-validator**
 - Cryptographically random reset tokens (`crypto.randomBytes`)
 
@@ -234,5 +236,5 @@ echo "Proof generated successfully"
 - `challenge.txt` was generated locally using `openssl rand -hex 32`
 - SHA256 computed over exact concatenation of `challenge + commit_hash` (no whitespace)
 - Signature uses ECDSA with curve **secp256r1 (prime256v1)**
-- Private key (`private.pem`) was generated locally and is excluded from the repo via `.gitignore`
-- Public key `proof_pub.pem` is included for evaluator verification
+- Private key (`private.pem`) generated locally and excluded from repo via `.gitignore`
+- Public key `proof_pub.pem` included for evaluator verification

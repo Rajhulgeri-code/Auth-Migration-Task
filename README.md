@@ -1,6 +1,6 @@
 # Auth Backend — JWT + 2FA + Forgot Password
 
-A production-grade authentication backend built with Node.js and Express, using PostgreSQL via Prisma. All authentication logic lives in a single, well-structured `src/index.js` — covering JWT token management, two-factor authentication via OTP, refresh token rotation with reuse detection, and a complete password reset flow.
+A production-grade authentication backend built with Node.js and Express, using PostgreSQL via Prisma. All authentication logic lives in a single, well-structured `src/index.js` — covering JWT token management, two-factor authentication via OTP, refresh token rotation with reuse detection, device scoping, and a complete password reset flow.
 
 ---
 
@@ -29,7 +29,8 @@ auth-backend/
 │   ├── migrations/
 │   │   ├── 20260420092345_init/migration.sql
 │   │   ├── 20260420114213_otp/migration.sql
-│   │   └── 20260420182850_init/migration.sql
+│   │   ├── 20260420182850_init/migration.sql
+│   │   └── 20260424030015_add_device_scoping/migration.sql
 │   ├── schema.prisma
 │   └── migration_lock.toml
 ├── PROOF_OF_SUBMISSION/
@@ -81,7 +82,7 @@ Make sure Docker Desktop is installed and running, then:
 docker-compose up db -d
 ```
 
-This starts a fresh PostgreSQL instance in a container on port `5433`. Then set your `.env`:
+This starts a fresh PostgreSQL instance in a container on port `5433`. Then create your `.env`:
 
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5433/authdb"
@@ -93,7 +94,7 @@ REFRESH_TOKEN_SECRET="your_refresh_secret"
 
 #### Option B — Using your own local PostgreSQL
 
-If PostgreSQL is already installed on your machine, create the database and point your `.env` to it:
+If PostgreSQL is already installed, create the database and point your `.env` to it:
 
 ```sql
 CREATE DATABASE authdb;
@@ -115,9 +116,9 @@ REFRESH_TOKEN_SECRET="your_refresh_secret"
 npm test
 ```
 
-That's it — no manual migration step needed.
+No manual migration step needed.
 
-### 5. Start the Server (optional, for manual testing)
+### 5. Start the Server (for manual testing)
 
 ```bash
 node src/index.js
@@ -133,7 +134,7 @@ Server runs at `http://localhost:5000`
 |---|---|---|---|
 | POST | `/register` | No | Register a new user |
 | POST | `/login` | No | Login with email + password |
-| GET | `/profile` | Yes | Access protected user profile |
+| GET | `/profile` | Yes | Access protected user profile + active sessions |
 | POST | `/token/refresh` | No | Rotate refresh token |
 | POST | `/logout` | No | Revoke refresh token |
 | POST | `/2fa/enable` | Yes | Send OTP to enable 2FA |
@@ -150,7 +151,7 @@ Server runs at `http://localhost:5000`
 npm test
 ```
 
-The `pretest` script automatically runs `prisma generate` and `prisma migrate deploy` before the test suite executes. The test suite uses **Jest + Supertest** and runs a complete end-to-end flow against a real database, cleaning up before and after all tests automatically.
+The `pretest` script automatically runs `prisma generate` and `prisma migrate deploy` before the test suite executes. Uses **Jest + Supertest** against a real database with auto-cleanup before and after all tests.
 
 ### What's Tested
 
@@ -173,6 +174,7 @@ This project uses a **mock delivery system** — all OTPs and reset tokens are p
 ```
 [OTP] enable_2fa OTP for user abc123: 847291
 [AUTH] Password reset token for user@gmail.com: f3a9c1...
+[AUTH] Tokens issued for user: abc123 | Device: PostmanRuntime/7.x | IP: ::ffff:127.0.0.1
 ```
 
 ---
@@ -182,14 +184,14 @@ This project uses a **mock delivery system** — all OTPs and reset tokens are p
 **JWT Tokens**
 - Short-lived access tokens (15 minutes)
 - Long-lived refresh tokens (7 days)
-- Refresh tokens are **hashed with bcrypt** before storing — raw token never saved in DB
-- Token rotation on every refresh — old token is revoked immediately
-- Reuse detection — if an already-used refresh token is presented, **all sessions for that user are revoked**
+- Refresh tokens hashed with bcrypt before storing — raw token never saved in DB
+- Token rotation on every refresh — old token revoked immediately
+- Reuse detection — presenting a used token revokes all sessions for that user
 
 **OTP / 2FA**
 - 6-digit OTP, expires in 5 minutes
 - Maximum 5 attempts per OTP — locked after limit
-- OTP marked as used after successful verification — cannot be reused
+- OTP marked as used after verification — cannot be reused
 - Separate OTP purposes: `enable_2fa`, `login`, `forgot_password`
 
 **Passwords**
@@ -205,10 +207,13 @@ This project uses a **mock delivery system** — all OTPs and reset tokens are p
 
 ## Bonus Features Implemented
 
-The following optional features from the brief were implemented:
+All of the following optional features from the brief were implemented:
 
-- **Refresh token reuse detection** — presenting a used refresh token immediately revokes all sessions for that user
-- **OTP attempt limiting** — OTP is locked after 5 failed attempts, preventing brute force
+| Bonus Feature | Status | Details |
+|---|---|---|
+| Refresh token rotation + reuse detection | ✅ | Reuse revokes all sessions for that user |
+| Device scoping for refresh tokens | ✅ | `User-Agent` and IP stored per token, shown in `/profile` |
+| Rate-limited endpoints + OTP attempt limiting | ✅ | 20 req/15min auth, 10 req/15min OTP, max 5 OTP attempts |
 
 ---
 
