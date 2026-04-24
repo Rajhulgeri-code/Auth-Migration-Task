@@ -105,7 +105,7 @@ app.post("/login", authLimiter, validateLogin, async (req, res) => {
     return res.json({ requires2FA: true, userId: user.id });
   }
 
-  return issueTokens(user.id, res);
+  return issueTokens(user.id, res, req);
 });
 
 /* ---------------- OTP HELPERS ---------------- */
@@ -198,11 +198,11 @@ app.post("/2fa/login/verify", otpLimiter, async (req, res) => {
   const result = await validateOTP(userId, otp, "login");
   if (!result.valid) return res.status(400).json({ error: result.error });
 
-  return issueTokens(userId, res);
+  return issueTokens(userId, res, req);
 });
 
-/* ---------------- TOKEN ISSUE + ROTATION ---------------- */
-async function issueTokens(userId, res) {
+/* ---------------- TOKEN ISSUE + ROTATION + DEVICE SCOPING ---------------- */
+async function issueTokens(userId, res, req) {
   const accessToken = jwt.sign(
     { userId },
     process.env.ACCESS_TOKEN_SECRET,
@@ -216,15 +216,21 @@ async function issueTokens(userId, res) {
 
   const tokenHash = await bcrypt.hash(refreshToken, 10);
 
+  // Capture device info and IP address
+  const device_info = req?.headers?.["user-agent"] || "unknown";
+  const ip_address = req?.ip || req?.connection?.remoteAddress || "unknown";
+
   await prisma.refreshToken.create({
     data: {
       user_id: userId,
       token_hash: tokenHash,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      device_info,
+      ip_address
     }
   });
 
-  console.log(`[AUTH] Tokens issued for user: ${userId}`);
+  console.log(`[AUTH] Tokens issued for user: ${userId} | Device: ${device_info} | IP: ${ip_address}`);
   res.json({ accessToken, refreshToken });
 }
 
@@ -249,7 +255,7 @@ app.post("/token/refresh", authLimiter, async (req, res) => {
       }
     }
 
-    // 🔥 REUSE DETECTION (CORE CHANGE)
+    // 🔥 REUSE DETECTION
     if (!matched) {
       console.log(`[SECURITY] Refresh token reuse detected for user ${decoded.userId}`);
 
@@ -284,7 +290,7 @@ app.post("/token/refresh", authLimiter, async (req, res) => {
 
     console.log(`[AUTH] Token rotated for user: ${decoded.userId}`);
 
-    return issueTokens(decoded.userId, res);
+    return issueTokens(decoded.userId, res, req);
 
   } catch {
     return res.status(403).json({ error: "Invalid refresh token" });
@@ -334,7 +340,6 @@ app.post("/forgot-password", authLimiter, [
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return res.status(400).json({ error: "User not found" });
 
-  // Use crypto for cryptographically random token
   const crypto = require("crypto");
   const token = crypto.randomBytes(32).toString("hex");
 
@@ -400,7 +405,19 @@ app.get("/profile", authMiddleware, async (req, res) => {
 
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  res.json(user);
+  // Show active sessions with device info
+  const activeSessions = await prisma.refreshToken.findMany({
+    where: { user_id: req.user.userId, revoked: false },
+    select: {
+      id: true,
+      device_info: true,
+      ip_address: true,
+      created_at: true,
+      expires_at: true
+    }
+  });
+
+  res.json({ ...user, active_sessions: activeSessions });
 });
 
 /* ---------------- SERVER ---------------- */

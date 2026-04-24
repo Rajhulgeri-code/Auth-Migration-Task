@@ -27,6 +27,8 @@ model RefreshToken {
   expires_at  DateTime
   revoked     Boolean  @default(false)
   created_at  DateTime @default(now())
+  device_info String?
+  ip_address  String?
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
