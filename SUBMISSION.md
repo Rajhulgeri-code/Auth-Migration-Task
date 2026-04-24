@@ -129,7 +129,7 @@ All OTPs and reset tokens are printed to the server console (mock delivery):
 
 ## Demo Video
 
-*(Add video link here)*
+[Watch Demo Video on Google Drive](https://drive.google.com/file/d/1T4VyrSUaFIc4Bd9Oxk8cxjvyysugn2N6/view?usp=sharing)
 
 ---
 

@@ -203,7 +203,7 @@
 - [x] Full `compute_proof.sh` script contents
 - [x] All `PROOF_OF_SUBMISSION/` files documented
 - [x] Security features documented
-- [x] Demo video link *(to be added)*
+- [x] Demo video link
 
 ---
 
